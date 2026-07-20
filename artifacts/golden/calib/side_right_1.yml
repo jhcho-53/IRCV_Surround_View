@@ -1,0 +1,38 @@
+%YAML:1.0
+---
+camera_name: side_right_1
+image_width: 1920
+image_height: 1200
+distortion_model: "fisheye_kannala_brandt (OpenCV cv::fisheye, 4 coeffs k1..k4)"
+camera_matrix: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 1063.3749713336533, 0., 985.57781550100367, 0.,
+       1060.4728910897343, 589.73784318693345, 0., 0., 1. ]
+distortion_coefficients: !!opencv-matrix
+   rows: 1
+   cols: 4
+   dt: d
+   data: [ -0.053803614956181058, -0.00046100754140282344,
+       0.035080761480493383, -0.029758800713336059 ]
+vehicle_frame: "X=forward, Y=left, Z=up; origin = rear-axle centre projected on the ground (Z=0)"
+T_vehicle_from_camera: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ -0.95751902266298194, -0.040922224764320864,
+       0.28545173455221184, 1.6078369979488545, -0.27614481872125607,
+       0.41528688461473512, -0.86676458312531024, -0.66595998810547097,
+       -0.083074426461653444, -0.90876959400462265, -0.40894555222026946,
+       1.6036155748191949, 0., 0., 0., 1. ]
+position_xyz_m: !!opencv-matrix
+   rows: 1
+   cols: 3
+   dt: d
+   data: [ 1.6078369979488545, -0.66595998810547097, 1.6036155748191949 ]
+rotation_rodrigues: !!opencv-matrix
+   rows: 1
+   cols: 3
+   dt: d
+   data: [ -0.27927928516717015, 2.4502248817186469, -1.5639276486371361 ]

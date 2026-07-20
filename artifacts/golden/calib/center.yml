@@ -1,0 +1,19 @@
+%YAML:1.0
+---
+camera_name: center
+image_width: 1920
+image_height: 1200
+distortion_model: "fisheye_kannala_brandt (OpenCV cv::fisheye, 4 coeffs k1..k4)"
+camera_matrix: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 933.19197840946777, 0., 936.39669465401812, 0.,
+       933.32884515579531, 582.42862633025572, 0., 0., 1. ]
+distortion_coefficients: !!opencv-matrix
+   rows: 1
+   cols: 4
+   dt: d
+   data: [ 0.055693534170597116, -0.45194422809880314,
+       1.0584597916831366, -1.0062822341907105 ]
+extrinsic_status: NOT CALIBRATED - this camera never observed the board in the extrinsic recording

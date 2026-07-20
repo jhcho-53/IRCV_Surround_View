@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.pyo
+
+# Claude/AI process & design docs (brainstorm spec, plan, SDD briefs/reports/progress)
+docs/
