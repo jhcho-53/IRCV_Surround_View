@@ -1,0 +1,31 @@
+%YAML:1.0
+number_x_square: 8
+number_y_square: 7
+resolution_x: 800
+resolution_y: 700
+length_square: 0.12
+length_marker: 0.09
+number_board: 1
+boards_index: []
+square_size: 0.12
+number_x_square_per_board: []
+number_y_square_per_board: []
+square_size_per_board: []
+distortion_model: 1
+distortion_per_camera : []
+number_camera: 1
+refine_corner: 1
+min_perc_pts: 0.3
+cam_params_path: "None"
+fix_intrinsic: 0
+root_path: "__DATA_ROOT__/extracted/calib_side_right_1_20260715_195404"
+cam_prefix: "Cam_"
+keypoints_path: "None"
+quaternion_averaging: 1
+ransac_threshold: 10
+number_iterations: 1000
+he_approach: 0
+save_path: "__DATA_ROOT__/results/side_right_1"
+save_detection: 0
+save_reprojection: 1
+camera_params_file_name: ""

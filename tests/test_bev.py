@@ -6,6 +6,7 @@ r = bev.BevRenderer(cams, vf, g)
 assert (r.H, r.W) == (960, 720), (r.H, r.W)          # extent 16x12 m @ 60 ppm
 frac = (r.who < 0).mean()
 assert 0.02 < frac < 0.08, frac                       # blind zone ~4.5%
+_env.require(f"{config.FRAMES_DIR}/camera_rear/0261.jpg", "sync frames (frame 0261)")
 imgs = [cv2.imread(f"{config.FRAMES_DIR}/camera_{n}/0261.jpg") for n in config.ORDER]
 out = r.render(imgs, inpaint=True)
 assert out.shape == (960,720,3) and out.sum() > 0

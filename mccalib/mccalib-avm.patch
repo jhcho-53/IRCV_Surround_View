@@ -1,0 +1,64 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 9b19dc3..cad4532 100755
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -14,9 +14,15 @@ include_directories( ${OpenCV_INCLUDE_DIRS} )
+ find_package(Ceres REQUIRED)
+ 
+ # boost related setup
+-set(Boost_USE_STATIC_LIBS ON)
++# Default to static libs (as in the Docker image); allow override for
++# environments that only ship shared Boost (e.g. conda-forge): -DBoost_USE_STATIC_LIBS=OFF
++if(NOT DEFINED Boost_USE_STATIC_LIBS)
++  set(Boost_USE_STATIC_LIBS ON)
++endif()
+ set(Boost_USE_MULTITHREADED ON)
+-find_package(Boost COMPONENTS log system REQUIRED)
++# Boost.System is header-only since Boost 1.69 and has no standalone CMake
++# component in Boost >= 1.90 (conda-forge); it is pulled in transitively by log.
++find_package(Boost COMPONENTS log REQUIRED)
+ message(STATUS "Boost version: ${Boost_VERSION}")
+ 
+ IF(SSSE3_FOUND)
+diff --git a/McCalib/CMakeLists.txt b/McCalib/CMakeLists.txt
+index 8f87ea4..251cb3c 100644
+--- a/McCalib/CMakeLists.txt
++++ b/McCalib/CMakeLists.txt
+@@ -5,4 +5,4 @@ add_library(McCalib STATIC ${MC_CALIB_HEADERS} ${MC_CALIB_SOURCES})
+ set_target_properties(McCalib PROPERTIES VERSION ${PROJECT_VERSION})
+ target_include_directories(McCalib PUBLIC include)
+ target_include_directories(McCalib PUBLIC src)
+-target_link_libraries(McCalib PUBLIC -L/usr/local/lib ${OpenCV_LIBS} ${CERES_LIBRARIES} Boost::log Boost::system)
+\ No newline at end of file
++target_link_libraries(McCalib PUBLIC -L/usr/local/lib ${OpenCV_LIBS} ${CERES_LIBRARIES} Boost::log)
+\ No newline at end of file
+diff --git a/McCalib/include/McCalib.hpp b/McCalib/include/McCalib.hpp
+index 044f456..1bd21a1 100644
+--- a/McCalib/include/McCalib.hpp
++++ b/McCalib/include/McCalib.hpp
+@@ -40,13 +40,13 @@ public:
+ #if (defined(CV_VERSION_MAJOR) && CV_VERSION_MAJOR <= 4 &&                     \
+      defined(CV_VERSION_MINOR) && CV_VERSION_MINOR < 7)
+   cv::Ptr<cv::aruco::Dictionary> dict_ = cv::aruco::getPredefinedDictionary(
+-      cv::aruco::DICT_6X6_1000); // load the dictionary that correspond to the
++      cv::aruco::DICT_5X5_1000); // load the dictionary that correspond to the
+                                  // charuco board
+   cv::Ptr<cv::aruco::DetectorParameters> charuco_params_ =
+       cv::aruco::DetectorParameters::create(); // parameters for detection
+ #else
+   cv::aruco::Dictionary dict_ = cv::aruco::getPredefinedDictionary(
+-      cv::aruco::DICT_6X6_1000); // load the dictionary that correspond to the
++      cv::aruco::DICT_5X5_1000); // load the dictionary that correspond to the
+                                  // charuco board
+   cv::aruco::DetectorParameters charuco_params_ =
+       cv::aruco::DetectorParameters(); // parameters for detection
+diff --git a/apps/calibrate/CMakeLists.txt b/apps/calibrate/CMakeLists.txt
+index fa7d2c2..0bed7fc 100644
+--- a/apps/calibrate/CMakeLists.txt
++++ b/apps/calibrate/CMakeLists.txt
+@@ -3,4 +3,4 @@ set(SOURCES
+ )
+ 
+ add_executable(calibrate ${SOURCES})
+-target_link_libraries(calibrate -L/usr/local/lib ${OpenCV_LIBS} ${CERES_LIBRARIES} Boost::log Boost::system McCalib)
++target_link_libraries(calibrate -L/usr/local/lib ${OpenCV_LIBS} ${CERES_LIBRARIES} Boost::log McCalib)

@@ -1,5 +1,6 @@
 """Camera calibration I/O + fisheye projection (replaces the 11x duplicated loader)."""
 from dataclasses import dataclass
+import os, sys
 import numpy as np, cv2, config
 
 @dataclass
@@ -17,7 +18,18 @@ def _read(node):
     w = int(node.getNode("img_width").real()); h = int(node.getNode("img_height").real())
     return K, D, w, h
 
-def load_cameras(yaml_path=config.CALIB_YAML, order=config.ORDER):
+def _resolve(primary, golden, label):
+    """Use the external calibration file when present, else the bundled golden copy."""
+    if os.path.exists(primary):
+        return primary
+    if golden and os.path.exists(golden):
+        print(f"[cameras] {label} not found at {primary} -> using bundled golden copy",
+              file=sys.stderr)
+        return golden
+    return primary   # let cv2.FileStorage raise with the original path
+
+def load_cameras(yaml_path=None, order=config.ORDER):
+    yaml_path = _resolve(yaml_path or config.CALIB_YAML, config.CALIB_YAML_GOLDEN, "CALIB_YAML")
     fs = cv2.FileStorage(yaml_path, cv2.FILE_STORAGE_READ)
     cams = []
     for i, name in enumerate(order):
@@ -28,7 +40,8 @@ def load_cameras(yaml_path=config.CALIB_YAML, order=config.ORDER):
     fs.release()
     return cams
 
-def load_center(yaml_path=config.INTRINSICS_YAML):
+def load_center(yaml_path=None):
+    yaml_path = _resolve(yaml_path or config.INTRINSICS_YAML, config.INTRINSICS_YAML_GOLDEN, "INTRINSICS_YAML")
     fs = cv2.FileStorage(yaml_path, cv2.FILE_STORAGE_READ)
     nd = fs.getNode("camera_7"); K, D, w, h = _read(nd); fs.release()
     return Camera("center", K, D, None, w, h)

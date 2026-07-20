@@ -3,10 +3,12 @@ import os
 
 PIPELINE = os.path.dirname(os.path.abspath(__file__))   # this repo (cloned as IRCV_Surround_View/)
 
-# ── Machine-specific paths — EDIT for your setup ─────────────────────────────
-# DATA_ROOT is where recordings, MC-Calib results, and outputs live (OUTSIDE the
-# repo). Override without editing this file: `export AVM_DATA_ROOT=/your/path`.
-DATA_ROOT = os.environ.get("AVM_DATA_ROOT", "/data4/jaehyeon/DM")
+# ── Data root — supplied externally, NOT shipped in the repo ─────────────────
+# The code is clone-only; the dataset (recordings, MC-Calib outputs, frames)
+# lives under DATA_ROOT and is provided separately. Default: a `data/` dir next
+# to this file — drop the external dataset there, or point elsewhere without
+# editing this file:  `export AVM_DATA_ROOT=/your/path`.
+DATA_ROOT = os.environ.get("AVM_DATA_ROOT", os.path.join(PIPELINE, "data"))
 # ─────────────────────────────────────────────────────────────────────────────
 
 # --- data / result paths (derived from DATA_ROOT) ---
@@ -19,6 +21,13 @@ EXPORT_DIR      = f"{DATA_ROOT}/calib"               # per-camera <name>.yml out
 ARTIFACTS       = f"{PIPELINE}/artifacts"            # repo-relative (kept in git)
 GROUND_NPZ      = f"{ARTIFACTS}/ground_plane.npz"
 VEHICLE_NPZ     = f"{ARTIFACTS}/vehicle_frame.npz"
+
+# Bundled golden copies of the MC-Calib outputs, byte-identical to the run that
+# produced this repo. load_cameras()/load_center() fall back to these when the
+# external CALIB_YAML/INTRINSICS_YAML above are absent, so a fresh clone renders
+# the BEV from committed calibration once you supply only the image frames.
+CALIB_YAML_GOLDEN      = f"{ARTIFACTS}/golden/calib/_mccalib_raw_ref_frame.yml"
+INTRINSICS_YAML_GOLDEN = f"{ARTIFACTS}/golden/calib/_intrinsics_all_cameras.yml"
 
 # --- camera model ---
 ORDER = ["front_left","front_right","side_left_1","side_left_2","side_right_1","side_right_2","rear"]
