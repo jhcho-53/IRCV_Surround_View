@@ -55,9 +55,30 @@ python stages/fit_ground.py
 
 ## 2. The data
 
-- **Original ROS 2 bag** (full frames, all 8 cameras, ~30 fps): `/home/jaehyeon/MC-Calib/ext/calib_20260716_151806_0.db3` — topics `/(camera_*)/image_rgb/compressed` (`sensor_msgs/CompressedImage`, JPEG, **1920×1200**).
-- **Per-camera board recordings** (for intrinsics/extrinsics): under `/home/jaehyeon/MC-Calib/aroundview/` (single-camera + overlap `..._floor` sequences).
-- ⚠️ The bags' `camera_info` is a **placeholder** (`plumb_bob`, D=0) — ignore it. The lenses are **fisheye**.
+> **Paths.** All input/output locations are set in **`config.py`** — point it at your machine by editing `DATA_ROOT` (or `export AVM_DATA_ROOT=/your/path`). The repo clones as `IRCV_Surround_View/`; run every command from inside it. Paths shown below are examples; substitute your own. (MC-Calib itself is a **separate** checkout/build — see §1.)
+
+**Original ROS 2 bag** — full frames, all 8 cameras, ~30 fps, `sensor_msgs/CompressedImage` (JPEG **1920×1200**). A rosbag2 recording:
+```
+<recording>/                       # e.g.  <DATA_ROOT>/bags/calib_XXXXXXXX
+├── <recording>_0.db3              # rosbag2 SQLite database
+│      topics(id, name, type)                    ← one row per topic
+│      messages(id, topic_id, timestamp, data)   ← data = CDR-serialized message blob
+└── metadata.yaml                  # topic list, per-topic message_count, duration
+
+8 image topics, type sensor_msgs/msg/CompressedImage:
+   /camera_front_left/image_rgb/compressed     /camera_side_right_1/image_rgb/compressed
+   /camera_front_right/image_rgb/compressed    /camera_side_right_2/image_rgb/compressed
+   /camera_side_left_1/image_rgb/compressed    /camera_rear/image_rgb/compressed
+   /camera_side_left_2/image_rgb/compressed    /camera_center/image_rgb/compressed
+
+each message blob = CDR( std_msgs/Header , format:string , data:uint8[] )
+                    └─ data[] holds the JPEG bytes (SOI FF D8 … FF D9 EOI)
+```
+`core/frames.py` reads `topics` for `*/image_rgb/compressed`, walks `messages` per topic by timestamp, carves the JPEG (SOI…EOI) out of each blob, and matches frames across cameras by nearest timestamp.
+
+**Per-camera board recordings** (for intrinsics/extrinsics): single-camera + 2-camera overlap (`..._floor`) sequences, one folder per camera.
+
+⚠️ The bag's `camera_info` topic is a **placeholder** (`plumb_bob`, D=0) — ignore it; the lenses are **fisheye**.
 
 ---
 
@@ -65,11 +86,10 @@ python stages/fit_ground.py
 
 ### 3.1 Extract synchronized frames from the bag
 ```bash
-python stages/extract_frames.py \
-    /home/jaehyeon/MC-Calib/ext/calib_20260716_151806_0.db3 \
-    /data4/jaehyeon/DM/frames_151806
+python stages/extract_frames.py  path/to/<recording>_0.db3  path/to/frames_out
+#   point config.py's FRAMES_DIR at this output dir so the later stages find it
 ```
-Writes `frames_151806/camera_<name>/<setidx:04d>.jpg` (nearest-timestamp sync) + `timestamps.csv`. All 8 recorded cameras are extracted, but the BEV consumes only the **7** in `config.ORDER` (`center` is dropped). Result: **523 synchronized sets**, median inter-camera `max_dt` **9.3 ms**.
+Writes `<frames_dir>/camera_<name>/<setidx:04d>.jpg` (nearest-timestamp sync) + `timestamps.csv`. All 8 recorded cameras are extracted, but the BEV consumes only the **7** in `config.ORDER` (`center` is dropped). Result: **523 synchronized sets**, median inter-camera `max_dt` **9.3 ms**.
 
 > Cameras are **free-running (~30 fps), not hardware-synced** (~100 ms start offset). Frames are matched by nearest timestamp; hold the board still at each pose to avoid motion error.
 
@@ -117,7 +137,7 @@ Defines **X=forward, Y=left, Z=up, origin = rear-axle centre projected on the gr
 ### 3.6 Render the BEV
 ```bash
 # metric still with overlays (car footprint, 1 m grid, camera dots, forward arrow)
-python stages/render_bev.py 261 --out /data4/jaehyeon/DM/results/bev_vehicle_261.jpg
+python stages/render_bev.py 261    # writes config.RESULTS_DIR/bev_vehicle_261.jpg (add --out PATH to override)
 #   optional zoom/coverage:  render_bev.py 261 --extent -3 7 -4 4 --ppm 100
 
 # clean top-down video over the whole sequence (no overlays)
@@ -129,7 +149,7 @@ Each ground pixel is sampled from the best-incidence camera; the **ego blind zon
 
 ### 3.7 Export per-camera calibration
 ```bash
-python stages/export_calib.py     # -> /home/jaehyeon/MC-Calib/calib/<camera>.yml
+python stages/export_calib.py     # -> $EXPORT_DIR/<camera>.yml   (config.EXPORT_DIR, default $DATA_ROOT/calib)
 ```
 Each `<camera>.yml` (OpenCV `FileStorage`): `camera_matrix`, `distortion_coefficients` (fisheye 4 coeffs), `T_vehicle_from_camera` (4×4, `X_vehicle = T · X_camera`), `position_xyz_m`, `rotation_rodrigues`. `center.yml` is intrinsics-only.
 

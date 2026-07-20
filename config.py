@@ -1,17 +1,22 @@
 """Single source of paths, constants, and measured inputs for the AVM BEV pipeline."""
 import os
 
-PIPELINE = os.path.dirname(os.path.abspath(__file__))
-DM = "/data4/jaehyeon/DM"
+PIPELINE = os.path.dirname(os.path.abspath(__file__))   # this repo (cloned as IRCV_Surround_View/)
 
-# --- data / result paths ---
-CALIB_YAML      = f"{DM}/results/extrinsic_7cam_sync10_refi/calibrated_cameras_data.yml"  # K,D,pose (ref frame)
-INTRINSICS_YAML = f"{DM}/results/intrinsics_all_cameras.yml"                              # camera_0..7 (has center)
-FRAMES_DIR      = f"{DM}/frames_151806"          # camera_<name>/<setidx>.jpg  (sync full frames)
-FLOOR_BOARD_DIR = f"{DM}/extracted/calib_extrinsic_example_left_right_floor20260715_202434"  # Cam_001=side_left_1, Cam_002=side_left_2
-RESULTS_DIR     = f"{DM}/results"
-EXPORT_DIR      = "/home/jaehyeon/MC-Calib/calib"
-ARTIFACTS       = f"{PIPELINE}/artifacts"
+# ── Machine-specific paths — EDIT for your setup ─────────────────────────────
+# DATA_ROOT is where recordings, MC-Calib results, and outputs live (OUTSIDE the
+# repo). Override without editing this file: `export AVM_DATA_ROOT=/your/path`.
+DATA_ROOT = os.environ.get("AVM_DATA_ROOT", "/data4/jaehyeon/DM")
+# ─────────────────────────────────────────────────────────────────────────────
+
+# --- data / result paths (derived from DATA_ROOT) ---
+CALIB_YAML      = f"{DATA_ROOT}/results/extrinsic_7cam_sync10_refi/calibrated_cameras_data.yml"  # MC-Calib output: K,D,pose (ref frame)
+INTRINSICS_YAML = f"{DATA_ROOT}/results/intrinsics_all_cameras.yml"                              # camera_0..7 (has center)
+FRAMES_DIR      = f"{DATA_ROOT}/frames_151806"       # camera_<name>/<setidx>.jpg  (sync full frames)
+FLOOR_BOARD_DIR = f"{DATA_ROOT}/extracted/calib_extrinsic_example_left_right_floor20260715_202434"  # Cam_001=side_left_1, Cam_002=side_left_2
+RESULTS_DIR     = f"{DATA_ROOT}/results"
+EXPORT_DIR      = f"{DATA_ROOT}/calib"               # per-camera <name>.yml output
+ARTIFACTS       = f"{PIPELINE}/artifacts"            # repo-relative (kept in git)
 GROUND_NPZ      = f"{ARTIFACTS}/ground_plane.npz"
 VEHICLE_NPZ     = f"{ARTIFACTS}/vehicle_frame.npz"
 
