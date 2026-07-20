@@ -27,16 +27,29 @@ ROS2 bag ──▶ extract frames ──▶ MC-Calib (intrinsics, extrinsics)
 
 ## 1. Environment
 
-Everything runs in the conda env **`mccalib`** (Python 3.13, OpenCV 4.11 with `cv2.fisheye` + `cv2.aruco`, NumPy). No system OpenCV/ROS needed.
+The pipeline needs only **Python + OpenCV (with fisheye + Charuco/aruco) + NumPy** — no system OpenCV or ROS. Create a conda env and install from `requirements.txt`:
 
 ```bash
-cd /data4/jaehyeon/DM/pipeline
-export TMPDIR=/data/tmp                       # keep temp OFF the near-full home disk
-CONDA=/data1/jaehyeon/miniconda3/bin/conda
-$CONDA run -n mccalib python <script> ...
+# 1) create & activate an environment
+conda create -n avm python=3.11 -y
+conda activate avm
+
+# 2) install the two runtime dependencies (numpy, opencv-contrib)
+cd <path-to-this-repo>
+pip install -r requirements.txt
+
+# 3) sanity check
+python -c "import cv2, numpy; print(cv2.__version__, numpy.__version__); \
+           print('aruco', hasattr(cv2.aruco,'CharucoDetector'), '| fisheye', hasattr(cv2.fisheye,'projectPoints'))"
+```
+Tested on **Python 3.13 · OpenCV 4.11.0 · NumPy 2.5.1**. `cv2.aruco.CharucoDetector` requires OpenCV ≥ 4.7 (satisfied by the pinned wheel). Python ≥ 3.9 works; 3.11–3.13 recommended for wheel availability.
+
+With the env active, run any stage or tool directly:
+```bash
+python stages/fit_ground.py
 ```
 
-**Disk note:** the home partition (`/`) is chronically ~full — keep all large outputs on `/data4`. The env itself lives at `/data/mccalib_conda/envs/mccalib` (driven by the user's miniconda). MC-Calib was built at `/data/mccalib_build` (CPU ceres, shared Boost 1.90 — needed 3 small `CMakeLists` edits for the conda toolchain).
+> **MC-Calib** — the C++ intrinsic/extrinsic engine used in §3.2–3.3 — is a **separate build**, not a Python dependency. See the [MC-Calib repo](https://github.com/rameau-fr/MC-Calib) (our build used CPU ceres + shared Boost with a few `CMakeLists` tweaks for the conda toolchain). This Python pipeline only **consumes** MC-Calib's output YAML.
 
 ---
 
@@ -52,7 +65,7 @@ $CONDA run -n mccalib python <script> ...
 
 ### 3.1 Extract synchronized frames from the bag
 ```bash
-$CONDA run -n mccalib python stages/extract_frames.py \
+python stages/extract_frames.py \
     /home/jaehyeon/MC-Calib/ext/calib_20260716_151806_0.db3 \
     /data4/jaehyeon/DM/frames_151806
 ```
@@ -61,11 +74,10 @@ Writes `frames_151806/camera_<name>/<setidx:04d>.jpg` (nearest-timestamp sync) +
 > Cameras are **free-running (~30 fps), not hardware-synced** (~100 ms start offset). Frames are matched by nearest timestamp; hold the board still at each pose to avoid motion error.
 
 ### 3.2 Intrinsic calibration (MC-Calib, per camera)
-Each camera's Charuco recording was calibrated separately (fisheye/Kannala model). Config lives in `/data4/jaehyeon/DM/configs/<camera>_intrinsic.yml`; run:
+Each camera's Charuco recording was calibrated separately (fisheye/Kannala model) with the **MC-Calib `calibrate` binary** (from your MC-Calib build — see §1). One config per camera:
 ```bash
-$CONDA run -n mccalib bash -c \
-  'CPATH=$CONDA_PREFIX/include LIBRARY_PATH=$CONDA_PREFIX/lib \
-   /data/mccalib_build/apps/calibrate/calibrate /data4/jaehyeon/DM/configs/front_left_intrinsic.yml'
+# <mc-calib-build>/apps/calibrate/calibrate  <config>.yml
+/path/to/MC-Calib/build/apps/calibrate/calibrate  configs/front_left_intrinsic.yml
 ```
 Key config values: `number_x_square: 8`, `number_y_square: 7`, `square_size: 0.12`, `distortion_model: 1` (fisheye).
 **Result:** 8 cameras, reprojection **0.71–1.53 px**. Consolidated to `results/intrinsics_all_cameras.yml` (`camera_0..7`).
@@ -75,7 +87,7 @@ Key config values: `number_x_square: 8`, `number_y_square: 7`, `square_size: 0.1
 ### 3.3 Extrinsic calibration (MC-Calib, multi-camera)
 The 7 cameras that saw the handheld board were calibrated together. Because the recording came as per-camera board-visible frames, we built a position-aligned input (same sync index across cameras, blank-filled gaps):
 ```bash
-$CONDA run -n mccalib python stages/build_input.py <src_percam_dir> <outdir>
+python stages/build_input.py <src_percam_dir> <outdir>
 ```
 then ran `calibrate` with `number_camera: 7`, `cam_params_path: results/intrinsics_all_cameras.yml`, and — critically — `fix_intrinsic: 0`.
 
@@ -90,13 +102,13 @@ All 7 cameras ended in one `camera_group: 0`. Output: `results/extrinsic_7cam_sy
 
 ### 3.4 Ground plane (from a board lying on the floor)
 ```bash
-$CONDA run -n mccalib python stages/fit_ground.py       # -> artifacts/ground_plane.npz
+python stages/fit_ground.py       # -> artifacts/ground_plane.npz
 ```
 Fits a plane through the on-floor board corners seen by `side_left_1`/`side_left_2` (the `..._floor` recording). **Plane RMS 17 mm.** Cross-check: the independently-estimated "board-up" normal agreed to **3°**.
 
 ### 3.5 Vehicle frame (tape-measured camera positions)
 ```bash
-$CONDA run -n mccalib python stages/fit_vehicle.py      # -> artifacts/vehicle_frame.npz
+python stages/fit_vehicle.py      # -> artifacts/vehicle_frame.npz
 ```
 Defines **X=forward, Y=left, Z=up, origin = rear-axle centre projected on the ground (Z=0)**. Fits a 2D rigid transform from the measured **horizontal** camera positions (`config.MEASURED_XY`) to the calibrated centres on the ground plane. **RMS 7.1 cm** (rear 1.1 cm).
 
@@ -105,11 +117,11 @@ Defines **X=forward, Y=left, Z=up, origin = rear-axle centre projected on the gr
 ### 3.6 Render the BEV
 ```bash
 # metric still with overlays (car footprint, 1 m grid, camera dots, forward arrow)
-$CONDA run -n mccalib python stages/render_bev.py 261 --out /data4/jaehyeon/DM/results/bev_vehicle_261.jpg
+python stages/render_bev.py 261 --out /data4/jaehyeon/DM/results/bev_vehicle_261.jpg
 #   optional zoom/coverage:  render_bev.py 261 --extent -3 7 -4 4 --ppm 100
 
 # clean top-down video over the whole sequence (no overlays)
-$CONDA run -n mccalib python stages/render_video.py     # -> results/bev_vehicle_sequence.mp4 (523 frames, 30 fps)
+python stages/render_video.py     # -> results/bev_vehicle_sequence.mp4 (523 frames, 30 fps)
 ```
 Each ground pixel is sampled from the best-incidence camera; the **ego blind zone (~4.5 %)** — ground the car occludes — is TELEA-inpainted from neighbours.
 
@@ -117,15 +129,15 @@ Each ground pixel is sampled from the best-incidence camera; the **ego blind zon
 
 ### 3.7 Export per-camera calibration
 ```bash
-$CONDA run -n mccalib python stages/export_calib.py     # -> /home/jaehyeon/MC-Calib/calib/<camera>.yml
+python stages/export_calib.py     # -> /home/jaehyeon/MC-Calib/calib/<camera>.yml
 ```
 Each `<camera>.yml` (OpenCV `FileStorage`): `camera_matrix`, `distortion_coefficients` (fisheye 4 coeffs), `T_vehicle_from_camera` (4×4, `X_vehicle = T · X_camera`), `position_xyz_m`, `rotation_rodrigues`. `center.yml` is intrinsics-only.
 
 ### 3.8 Diagnostics
 ```bash
-$CONDA run -n mccalib python tools/coverage_map.py                              # who-sees-what map (blind=black)
-$CONDA run -n mccalib python tools/seam_blend.py front_right side_right_1 261   # 2-cam overlap: floor aligned? / parallax?
-$CONDA run -n mccalib python tools/board_check.py side_left_1 <folder>          # detection + horizontality vs ground
+python tools/coverage_map.py                              # who-sees-what map (blind=black)
+python tools/seam_blend.py front_right side_right_1 261   # 2-cam overlap: floor aligned? / parallax?
+python tools/board_check.py side_left_1 <folder>          # detection + horizontality vs ground
 ```
 
 ---
@@ -237,6 +249,6 @@ results (../results) images, video, intrinsics/extrinsics YAML
 
 Verify the pipeline (all should print `OK ...`):
 ```bash
-for t in tests/test_*.py; do $CONDA run -n mccalib python "$t"; done
+for t in tests/test_*.py; do python "$t"; done
 ```
 Golden checks: `render_bev 261` pixel MAD = 0.000; `export_calib` YAML identical to golden; geometry reproduces RMS 7.1 cm / 17 mm.
