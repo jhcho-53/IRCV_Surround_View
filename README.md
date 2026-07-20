@@ -11,7 +11,7 @@ This documents the actual steps taken, the numbers achieved, and the pitfalls hi
 - **Rig:** **7 BEV cameras** on an Ioniq 5 — `front_left, front_right, side_left_1, side_left_2, side_right_1, side_right_2, rear` (roof/bonnet mounted). An 8th camera `center` is recorded and gets intrinsics, but is excluded from the BEV (never saw the board → no extrinsic).
 - **Target:** Charuco board — `DICT_5X5_1000`, **8×7 squares**, square **0.12 m**, marker **0.09 m**.
 - **Engine:** [MC-Calib](https://github.com/rameau-fr/MC-Calib) (C++) for intrinsics/extrinsics; a custom Python pipeline (this repo) for frame extraction, ground/vehicle-frame fitting, BEV rendering, and export.
-- **Result:** 7 cameras calibrated into one group at **1.20 px** reprojection, tied to a metric vehicle frame (rear-axle origin), rendered as a top-down BEV video. (`center` never saw the board → intrinsics only.)
+- **Output:** the 7 board-visible cameras calibrated into one group, tied to a metric vehicle frame (rear-axle origin), and rendered as a top-down BEV video. (`center` never saw the board → intrinsics only.)
 
 ```
 ROS2 bag ──▶ extract frames ──▶ MC-Calib (intrinsics, extrinsics)
@@ -89,7 +89,7 @@ each message blob = CDR( std_msgs/Header , format:string , data:uint8[] )
 python stages/extract_frames.py  path/to/<recording>_0.db3  path/to/frames_out
 #   point config.py's FRAMES_DIR at this output dir so the later stages find it
 ```
-Writes `<frames_dir>/camera_<name>/<setidx:04d>.jpg` (nearest-timestamp sync) + `timestamps.csv`. All 8 recorded cameras are extracted, but the BEV consumes only the **7** in `config.ORDER` (`center` is dropped). Result: **523 synchronized sets**, median inter-camera `max_dt` **9.3 ms**.
+Writes `<frames_dir>/camera_<name>/<setidx:04d>.jpg` (nearest-timestamp sync) + `timestamps.csv`. All 8 recorded cameras are extracted, but the BEV consumes only the **7** in `config.ORDER` (`center` is dropped). Each set groups the nearest-in-time frame from every camera; `timestamps.csv` records the per-set inter-camera `max_dt` so later steps can filter to well-synchronized sets.
 
 > Cameras are **free-running (~30 fps), not hardware-synced** (~100 ms start offset). Frames are matched by nearest timestamp; hold the board still at each pose to avoid motion error.
 
@@ -100,7 +100,7 @@ Each camera's Charuco recording was calibrated separately (fisheye/Kannala model
 /path/to/MC-Calib/build/apps/calibrate/calibrate  configs/front_left_intrinsic.yml
 ```
 Key config values: `number_x_square: 8`, `number_y_square: 7`, `square_size: 0.12`, `distortion_model: 1` (fisheye).
-**Result:** 8 cameras, reprojection **0.71–1.53 px**. Consolidated to `results/intrinsics_all_cameras.yml` (`camera_0..7`).
+Consolidate the 8 per-camera intrinsics into `results/intrinsics_all_cameras.yml` (`camera_0..7`) — the `cam_params_path` the extrinsic step reads.
 
 > **Pitfall — dictionary:** MC-Calib hardcodes `DICT_6X6_1000` in `McCalib/include/McCalib.hpp`. Our board is `DICT_5X5_1000` → we patched both occurrences to `DICT_5X5_1000` and rebuilt. Also the board is **(squaresX=8, squaresY=7)** in OpenCV's convention (the flir launch args' x/y are transposed) — verified by detection.
 
@@ -109,16 +109,9 @@ The 7 cameras that saw the handheld board were calibrated together. Because the 
 ```bash
 python stages/build_input.py <src_percam_dir> <outdir>
 ```
-then ran `calibrate` with `number_camera: 7`, `cam_params_path: results/intrinsics_all_cameras.yml`, and — critically — `fix_intrinsic: 0`.
+then ran `calibrate` with `number_camera: 7`, `cam_params_path: results/intrinsics_all_cameras.yml`, and — critically — `fix_intrinsic: 0` (jointly refining the intrinsics is what most improves the multi-camera fit; filtering to well-synchronized frames helps too).
 
-**The refinement that mattered** (mean reprojection error):
-| config | reproj |
-|---|---|
-| baseline (fixed intrinsics, all frames) | 3.0 px |
-| + sync filter (`max_dt ≤ 10 ms`) | 2.5 px |
-| **+ refine intrinsics jointly (`fix_intrinsic: 0`)** | **1.20 px** ✅ |
-
-All 7 cameras ended in one `camera_group: 0`. Output: `results/extrinsic_7cam_sync10_refi/calibrated_cameras_data.yml` (poses relative to `front_left`).
+All 7 cameras should end in one `camera_group: 0`. Output: `results/extrinsic_7cam_sync10_refi/calibrated_cameras_data.yml` (poses relative to `front_left`).
 
 ### 3.4 Ground plane (from a board lying on the floor)
 ```bash
@@ -162,24 +155,7 @@ python tools/board_check.py side_left_1 <folder>          # detection + horizont
 
 ---
 
-## 4. Results
-
-| camera | X (fwd) | Y (left) | Z (up) | mount |
-|---|---|---|---|---|
-| front_left | +3.53 | +0.67 | 1.04 | bonnet |
-| front_right | +3.45 | −0.66 | 1.05 | bonnet |
-| side_left_1 | +1.57 | +0.66 | 1.63 | roof |
-| side_left_2 | +0.42 | +0.60 | 1.63 | roof |
-| side_right_1 | +1.61 | −0.67 | 1.60 | roof |
-| side_right_2 | +0.40 | −0.60 | 1.64 | roof |
-| rear | −0.20 | −0.01 | 1.63 | roof |
-| center | — | — | — | intrinsics only |
-
-- Intrinsics: 0.71–1.53 px · Extrinsics: **1.20 px**, single group · Ground plane RMS **17 mm** · Vehicle-frame fit RMS **7.1 cm**.
-
----
-
-## 5. Data structures (what each step expects / produces)
+## 4. Data structures (what each step expects / produces)
 
 **Input — ROS 2 bag** (fed to `extract_frames`):
 ```
@@ -248,7 +224,7 @@ position_xyz_m (1x3), rotation_rodrigues (1x3)      # center.yml: intrinsics + e
 MEASURED_XY = { "<camera>": (X_forward_m, Y_left_m), ... }   # from rear-axle centre; heights NOT used (see §3.5)
 ```
 
-## 6. Repository layout
+## 5. Repository layout
 
 ```
 config.py            single source of paths, constants, MEASURED_XY (edit here, not in scripts)
